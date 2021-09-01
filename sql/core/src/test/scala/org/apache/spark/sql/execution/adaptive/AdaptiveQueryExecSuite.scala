@@ -311,6 +311,35 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-36630 Add the option to use physicalStats in AQE") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+      withTable("t1", "t2") {
+        spark.range(100).write.format("parquet").saveAsTable("t1")
+        Seq.fill(100)(("1", "a")).toDF("id", "part").write.format("parquet").saveAsTable("t2")
+        val query = """
+          | SELECT * FROM testData
+          | LEFT JOIN t1 ON t1.id = key
+          | LEFT JOIN t2 ON t2.id = key
+          | WHERE t2.part = "a"
+        """.stripMargin
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.isEmpty)
+        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+        assert(bhj.size == 2)
+        withSQLConf(SQLConf.USE_PHYSICAL_STATS_TO_SELECT_JOIN_ENABLED.key -> "true") {
+          val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          val smj = findTopLevelSortMergeJoin(plan)
+          assert(smj.size == 2)
+          val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+          assert(bhj.size == 1)
+        }
+      }
+    }
+  }
+
   test("multiple joins") {
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",

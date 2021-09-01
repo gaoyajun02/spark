@@ -308,6 +308,10 @@ trait JoinSelectionHelper {
     } else {
       conf.autoBroadcastJoinThreshold
     }
+    if (!plan.stats.isRuntime && conf.adaptiveExecutionEnabled &&
+      conf.usePhysicalStatsToSelectJoinEnabled) {
+      return false
+    }
     plan.stats.sizeInBytes >= 0 && plan.stats.sizeInBytes <= autoBroadcastJoinThreshold
   }
 
@@ -418,6 +422,10 @@ trait JoinSelectionHelper {
    * dynamic.
    */
   private def canBuildLocalHashMapBySize(plan: LogicalPlan, conf: SQLConf): Boolean = {
+    if (!plan.stats.isRuntime && conf.adaptiveExecutionEnabled &&
+      conf.usePhysicalStatsToSelectJoinEnabled) {
+      return false
+    }
     plan.stats.sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
   }
 
